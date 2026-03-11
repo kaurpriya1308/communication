@@ -1,10 +1,12 @@
 import streamlit as st
 import anthropic
+import json
+import os
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="The Moira Rose Refinement Salon",
-    page_icon="🎭",
+    page_title="Refined Communication",
+    page_icon="✦",
     layout="centered",
 )
 
@@ -13,7 +15,6 @@ st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Cinzel:wght@400;600&display=swap');
 
-/* ── Root palette ── */
 :root {
   --cream:   #f5f0e8;
   --ivory:   #faf7f2;
@@ -26,19 +27,14 @@ st.markdown("""
   --border:  #d6c9b8;
 }
 
-/* ── Global reset ── */
 html, body, [data-testid="stAppViewContainer"] {
   background: var(--cream) !important;
   font-family: 'EB Garamond', Georgia, serif !important;
   color: var(--ink) !important;
 }
-
 [data-testid="stHeader"] { background: transparent !important; }
-
-/* ── Hide Streamlit chrome ── */
 #MainMenu, footer, [data-testid="stToolbar"] { visibility: hidden; }
 
-/* ── Masthead ── */
 .masthead {
   text-align: center;
   padding: 2.5rem 1rem 0.5rem;
@@ -70,7 +66,6 @@ html, body, [data-testid="stAppViewContainer"] {
   font-style: italic;
 }
 
-/* ── Section label ── */
 .section-label {
   font-family: 'Cinzel', serif;
   font-size: 0.6rem;
@@ -80,7 +75,6 @@ html, body, [data-testid="stAppViewContainer"] {
   margin-bottom: 0.4rem;
 }
 
-/* ── Textarea override ── */
 textarea {
   font-family: 'EB Garamond', Georgia, serif !important;
   font-size: 1.05rem !important;
@@ -92,7 +86,6 @@ textarea {
 }
 textarea:focus { border-color: var(--gold) !important; box-shadow: none !important; }
 
-/* ── Primary button ── */
 .stButton > button {
   font-family: 'Cinzel', serif !important;
   font-size: 0.65rem !important;
@@ -108,7 +101,6 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
 }
 .stButton > button:hover { background: var(--rose-lt) !important; }
 
-/* ── Result cards ── */
 .result-card {
   background: var(--ivory);
   border: 1px solid var(--border);
@@ -118,7 +110,6 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
   border-radius: 1px;
 }
 .result-card.gold-accent { border-left-color: var(--gold); }
-
 .result-card h4 {
   font-family: 'Cinzel', serif;
   font-size: 0.58rem;
@@ -134,14 +125,14 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
   color: var(--ink);
   margin: 0 0 0.4rem 0;
 }
-.result-card .moira-text {
+.elevated-text {
   font-family: 'Cormorant Garamond', serif;
   font-size: 1.18rem;
   font-style: italic;
   line-height: 1.8;
   color: var(--ink);
 }
-.result-card .refined-text {
+.refined-text {
   font-family: 'Cormorant Garamond', serif;
   font-size: 1.05rem;
   font-style: italic;
@@ -149,7 +140,6 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
   line-height: 1.7;
 }
 
-/* vocab pill */
 .vocab-item {
   background: #ede7dc;
   border-left: 2px solid var(--gold);
@@ -169,10 +159,7 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
   line-height: 1.6;
 }
 
-/* divider */
 .ornament { text-align: center; color: var(--gold); font-size: 1.1rem; margin: 1.2rem 0; }
-
-/* spinner override */
 [data-testid="stSpinner"] p { font-style: italic; color: var(--muted) !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -181,10 +168,25 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
 st.markdown("""
 <div class="masthead">
   <div class="masthead-eyebrow">✦ &nbsp; A Communication Atelier &nbsp; ✦</div>
-  <div class="masthead-title">The Moira Rose<br>Refinement Salon</div>
+  <div class="masthead-title">Refined<br>Communication</div>
   <div class="masthead-sub">Where the unpolished becomes the unforgettable.</div>
 </div>
 """, unsafe_allow_html=True)
+
+# ── API Key: secrets → env → user input ──────────────────────────────────────
+api_key = st.secrets.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_API_KEY", "")
+
+if not api_key:
+    st.markdown('<div class="section-label">API Key Required</div>', unsafe_allow_html=True)
+    api_key = st.text_input(
+        "Anthropic API Key",
+        type="password",
+        placeholder="sk-ant-...",
+        label_visibility="collapsed",
+    )
+    if not api_key:
+        st.info("Enter your Anthropic API key above, or add `ANTHROPIC_API_KEY` to your Streamlit secrets.")
+        st.stop()
 
 # ── Session state ─────────────────────────────────────────────────────────────
 if "result" not in st.session_state:
@@ -197,7 +199,7 @@ st.markdown('<div class="section-label">Your Raw Composition</div>', unsafe_allo
 user_text = st.text_area(
     label="",
     value=st.session_state.input_text,
-    placeholder="Type or paste your text here — however rough, however unvarnished. Moira shall attend to it.",
+    placeholder="Type or paste your text here — however rough, however unvarnished.",
     height=150,
     key="text_input",
     label_visibility="collapsed",
@@ -214,16 +216,16 @@ if clear_btn:
     st.session_state.input_text = ""
     st.rerun()
 
-# ── Anthropic call ────────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are a sophisticated dual-purpose language coach and Moira Rose channeler.
+# ── System prompt ─────────────────────────────────────────────────────────────
+SYSTEM_PROMPT = """You are a sophisticated dual-purpose language coach and elevated communication stylist.
 
-When given a piece of text, respond ONLY in this exact JSON structure (no markdown, no backticks):
+When given a piece of text, respond ONLY in this exact JSON structure (no markdown, no backticks, no preamble — pure JSON only):
 
 {
-  "moira_version": "The rephrased text in Moira Rose's style — composed, elegantly formidable, two levels toned down from her theatrical peak. Calm, articulate, subtly authoritative. Uses elevated but realistic vocabulary. No sarcasm, no dramatics. Refined firmness only.",
+  "elevated_version": "The rephrased text in a composed, elegantly formidable style — calm, articulate, subtly authoritative. Uses elevated but realistic vocabulary. No sarcasm, no dramatics. Refined firmness only. Should feel poised, slightly imperious in a charming way, using rich vocabulary with deliberate cadence. Same message but elevated significantly.",
   "refined_version": "A polished, elevated version of the original — grammatically perfect, well-structured, sophisticated but not theatrical. This is what the person SHOULD have written.",
-  "grammar_notes": "2–3 specific grammar or punctuation issues found in the original. Be precise and kind.",
-  "structure_feedback": "1–2 sentences on the logical flow, argument structure, or clarity of thought.",
+  "grammar_notes": "2-3 specific grammar or punctuation issues found in the original. Be precise and kind. If no issues, say so graciously.",
+  "structure_feedback": "1-2 sentences on the logical flow, argument structure, or clarity of thought.",
   "improvement_tip": "One actionable, specific tip to elevate their communication going forward.",
   "vocab_upgrades": [
     {
@@ -235,74 +237,71 @@ When given a piece of text, respond ONLY in this exact JSON structure (no markdo
   ]
 }
 
-vocab_upgrades: provide 2–3 items. Choose words that are elevated but genuinely usable in professional or personal communication — not absurdly obscure. Think Moira-adjacent but grounded.
+vocab_upgrades: provide exactly 2-3 items. Choose words that are elevated but genuinely usable — not absurdly obscure. Realistic elevation, not theatrical excess."""
 
-The moira_version must feel like Moira Rose actually wrote it: poised, slightly imperious in a charming way, using rich vocabulary with deliberate cadence. It should be the same message but elevated beyond recognition."""
 
-def call_claude(text: str):
-    client = anthropic.Anthropic()
+def call_claude(text: str, key: str) -> dict:
+    client = anthropic.Anthropic(api_key=key)
     response = client.messages.create(
         model="claude-sonnet-4-20250514",
         max_tokens=1500,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": text}],
     )
-    import json
     raw = response.content[0].text.strip()
-    # strip possible code fences
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
     return json.loads(raw.strip())
 
+
 # ── Trigger ───────────────────────────────────────────────────────────────────
 if refine_btn and user_text.strip():
-    with st.spinner("Moira is composing herself…"):
+    with st.spinner("Composing an elevated rendering…"):
         try:
-            st.session_state.result = call_claude(user_text.strip())
+            st.session_state.result = call_claude(user_text.strip(), api_key)
             st.session_state.input_text = user_text.strip()
+        except json.JSONDecodeError as e:
+            st.error(f"Could not parse the response. Please try again. ({e})")
         except Exception as e:
-            st.error(f"Something went awry in the atelier: {e}")
+            st.error(f"Something went awry: {e}")
 
 elif refine_btn and not user_text.strip():
-    st.warning("Darling, you must give Moira something to work with.")
+    st.warning("You must provide something to refine.")
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if st.session_state.result:
     r = st.session_state.result
     st.markdown('<div class="ornament">· · · ✦ · · ·</div>', unsafe_allow_html=True)
 
-    # Moira version
     st.markdown(f"""
     <div class="result-card">
-      <h4>✦ &nbsp; The Moira Rose Rendering</h4>
-      <p class="moira-text">{r.get('moira_version','')}</p>
+      <h4>✦ &nbsp; Elevated Rendering</h4>
+      <p class="elevated-text">{r.get('elevated_version','')}</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Refined version
     st.markdown(f"""
     <div class="result-card gold-accent">
-      <h4>✦ &nbsp; Your Elevated Original</h4>
+      <h4>✦ &nbsp; Your Polished Original</h4>
       <p class="refined-text">{r.get('refined_version','')}</p>
     </div>
     """, unsafe_allow_html=True)
 
-    # Feedback triptych
     st.markdown('<div class="ornament">· · · ✦ · · ·</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-label">The Refinement Notes</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Refinement Notes</div>', unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="result-card">
-      <h4>Grammar & Mechanics</h4>
+      <h4>Grammar &amp; Mechanics</h4>
       <p>{r.get('grammar_notes','')}</p>
     </div>
     """, unsafe_allow_html=True)
 
     st.markdown(f"""
     <div class="result-card">
-      <h4>Structure & Thought</h4>
+      <h4>Structure &amp; Thought</h4>
       <p>{r.get('structure_feedback','')}</p>
     </div>
     """, unsafe_allow_html=True)
@@ -314,7 +313,6 @@ if st.session_state.result:
     </div>
     """, unsafe_allow_html=True)
 
-    # Vocabulary
     vocab = r.get("vocab_upgrades", [])
     if vocab:
         st.markdown('<div class="ornament">· · · ✦ · · ·</div>', unsafe_allow_html=True)
@@ -322,8 +320,10 @@ if st.session_state.result:
         for v in vocab:
             st.markdown(f"""
             <div class="vocab-item">
-              <div><span class="vocab-word">{v.get('elevated','')}</span>
-              &nbsp;<span style="color:var(--muted);font-size:0.85rem;">← instead of "{v.get('original','')}"</span></div>
+              <div>
+                <span class="vocab-word">{v.get('elevated','')}</span>
+                &nbsp;<span style="color:var(--muted);font-size:0.85rem;">&#8592; instead of &ldquo;{v.get('original','')}&rdquo;</span>
+              </div>
               <div class="vocab-body">
                 <em>{v.get('meaning','')}</em><br>
                 <span style="color:var(--ink);">{v.get('example','')}</span>
