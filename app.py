@@ -1,5 +1,5 @@
 import streamlit as st
-import anthropic
+import requests
 import json
 import os
 
@@ -118,7 +118,7 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
   text-transform: uppercase;
   margin: 0 0 0.8rem 0;
 }
-.result-card p, .result-card li {
+.result-card p {
   font-family: 'EB Garamond', Georgia, serif;
   font-size: 1.05rem;
   line-height: 1.75;
@@ -153,11 +153,7 @@ textarea:focus { border-color: var(--gold) !important; box-shadow: none !importa
   font-size: 1.05rem;
   color: var(--rose);
 }
-.vocab-body {
-  font-size: 0.92rem;
-  color: var(--muted);
-  line-height: 1.6;
-}
+.vocab-body { font-size: 0.92rem; color: var(--muted); line-height: 1.6; }
 
 .ornament { text-align: center; color: var(--gold); font-size: 1.1rem; margin: 1.2rem 0; }
 [data-testid="stSpinner"] p { font-style: italic; color: var(--muted) !important; }
@@ -174,18 +170,18 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── API Key: secrets → env → user input ──────────────────────────────────────
-api_key = st.secrets.get("ANTHROPIC_API_KEY", "") or os.environ.get("ANTHROPIC_API_KEY", "")
+api_key = st.secrets.get("GEMINI_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
 
 if not api_key:
     st.markdown('<div class="section-label">API Key Required</div>', unsafe_allow_html=True)
     api_key = st.text_input(
-        "Anthropic API Key",
+        "Google Gemini API Key",
         type="password",
-        placeholder="sk-ant-...",
+        placeholder="AIzaSy...",
         label_visibility="collapsed",
     )
     if not api_key:
-        st.info("Enter your Anthropic API key above, or add `ANTHROPIC_API_KEY` to your Streamlit secrets.")
+        st.info("Enter your free Gemini API key above, or add `GEMINI_API_KEY` to Streamlit secrets. Get one free at aistudio.google.com")
         st.stop()
 
 # ── Session state ─────────────────────────────────────────────────────────────
@@ -216,13 +212,13 @@ if clear_btn:
     st.session_state.input_text = ""
     st.rerun()
 
-# ── System prompt ─────────────────────────────────────────────────────────────
+# ── Prompt ────────────────────────────────────────────────────────────────────
 SYSTEM_PROMPT = """You are a sophisticated dual-purpose language coach and elevated communication stylist.
 
-When given a piece of text, respond ONLY in this exact JSON structure (no markdown, no backticks, no preamble — pure JSON only):
+When given a piece of text, respond ONLY in this exact JSON structure (no markdown, no backticks, no preamble — pure raw JSON only):
 
 {
-  "elevated_version": "The rephrased text in a composed, elegantly formidable style — calm, articulate, subtly authoritative. Uses elevated but realistic vocabulary. No sarcasm, no dramatics. Refined firmness only. Should feel poised, slightly imperious in a charming way, using rich vocabulary with deliberate cadence. Same message but elevated significantly.",
+  "elevated_version": "The rephrased text in a composed, elegantly formidable style — calm, articulate, subtly authoritative. Uses elevated but realistic vocabulary. No sarcasm, no dramatics. Refined firmness only. Poised, slightly imperious in a charming way, using rich vocabulary with deliberate cadence. Same message but elevated significantly.",
   "refined_version": "A polished, elevated version of the original — grammatically perfect, well-structured, sophisticated but not theatrical. This is what the person SHOULD have written.",
   "grammar_notes": "2-3 specific grammar or punctuation issues found in the original. Be precise and kind. If no issues, say so graciously.",
   "structure_feedback": "1-2 sentences on the logical flow, argument structure, or clarity of thought.",
@@ -232,25 +228,37 @@ When given a piece of text, respond ONLY in this exact JSON structure (no markdo
       "original": "word or phrase they used",
       "elevated": "more sophisticated alternative",
       "meaning": "clear definition in plain English",
-      "example": "A sentence using the elevated word naturally"
+      "example": "A natural sentence using the elevated word"
     }
   ]
 }
 
-vocab_upgrades: provide exactly 2-3 items. Choose words that are elevated but genuinely usable — not absurdly obscure. Realistic elevation, not theatrical excess."""
+vocab_upgrades: provide exactly 2-3 items. Elevated but genuinely usable — not absurdly obscure. Realistic elevation, not theatrical excess. Return ONLY the JSON object, nothing else."""
 
 
-def call_claude(text: str, key: str) -> dict:
-    client = anthropic.Anthropic(api_key=key)
-    response = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=1500,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": text}],
-    )
-    raw = response.content[0].text.strip()
+def call_gemini(text: str, key: str) -> dict:
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={key}"
+    payload = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": SYSTEM_PROMPT + "\n\nText to refine:\n" + text}
+                ]
+            }
+        ],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 1500,
+        }
+    }
+    resp = requests.post(url, json=payload, timeout=60)
+    resp.raise_for_status()
+    data = resp.json()
+    raw = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    # Strip code fences if Gemini wraps in them
     if raw.startswith("```"):
-        raw = raw.split("```")[1]
+        parts = raw.split("```")
+        raw = parts[1] if len(parts) > 1 else raw
         if raw.startswith("json"):
             raw = raw[4:]
     return json.loads(raw.strip())
@@ -260,10 +268,12 @@ def call_claude(text: str, key: str) -> dict:
 if refine_btn and user_text.strip():
     with st.spinner("Composing an elevated rendering…"):
         try:
-            st.session_state.result = call_claude(user_text.strip(), api_key)
+            st.session_state.result = call_gemini(user_text.strip(), api_key)
             st.session_state.input_text = user_text.strip()
+        except requests.exceptions.HTTPError as e:
+            st.error(f"API error {e.response.status_code}: {e.response.text}")
         except json.JSONDecodeError as e:
-            st.error(f"Could not parse the response. Please try again. ({e})")
+            st.error(f"Could not parse response. Please try again. ({e})")
         except Exception as e:
             st.error(f"Something went awry: {e}")
 
